@@ -21,7 +21,7 @@ class LSTMTime2Vec():
 
         x = RepeatVector(N_OUTPUTS)(x)
 
-        x = LSTM(N_BLOCKS,  return_sequences=True)(x)
+        x = LSTM(N_BLOCKS, return_sequences=True)(x)
 
         x = LSTM(N_BLOCKS)(x)
 
@@ -36,6 +36,56 @@ class LSTMTime2Vec():
         N_OUTPUTS = self.y.shape[1]
         inputs, outputs = self.nn_sctructure(N_INPUTS, N_FEATURES, N_OUTPUTS)
         self.model = Model(inputs, outputs)
+        self.model.compile(loss='mse', optimizer='adam', metrics=[new_mape])
+
+
+class LSTMTime2VecMultiInput():
+    def __init__(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.model = None
+
+    def nn_sctructure(self, N_INPUTS, N_FEATURES, N_PREDICT_INFO, N_OUTPUTS):
+        N_BLOCKS = 128
+        inp1 = Input((N_INPUTS, N_FEATURES), name='previous info')
+        inp2 = Input((N_OUTPUTS, N_PREDICT_INFO), name='predict info')
+        x = inp1
+        y = inp2
+
+        time_embedding = TimeDistributed(time2vec(3))(x[:, :, -1:])
+        x = Concatenate(axis=-1)([x, time_embedding])
+
+        x = LSTM(N_BLOCKS, return_sequences=True)(x)
+
+        x = LSTM(int(N_BLOCKS/2))(x)
+
+        x = RepeatVector(N_OUTPUTS)(x)
+
+        y = Dense(32, activation='gelu')(y)
+        x = Concatenate(axis=-1)([x, y])
+
+        x = LSTM(N_BLOCKS, return_sequences=True)(x)
+
+        #
+        # x = LSTM(N_BLOCKS)(x)
+        #
+        # x = Dense(N_OUTPUTS, activation='gelu')(x)
+
+        x = TimeDistributed(Dense(1, activation='gelu'))(x)
+
+        out = x
+        return inp1, inp2, out
+
+    def build_model(self):
+        N_INPUTS = self.x.shape[1]
+        N_FEATURES = self.x.shape[2]
+        N_OUTPUTS = self.y.shape[1]
+        N_PREDICT_INFO = self.z.shape[-1]
+        inputs1, inputs2, outputs = self.nn_sctructure(N_INPUTS, N_FEATURES,
+                                                       N_PREDICT_INFO,
+                                                       N_OUTPUTS)
+        self.model = Model(inputs=[inputs1, inputs2], outputs=outputs)
         self.model.compile(loss='mse', optimizer='adam', metrics=[new_mape])
 
 
@@ -66,11 +116,14 @@ class LSTMTime2VecDeeper():
         x = LSTM(N_BLOCKS, return_sequences=True)(x)
 
         x = LSTM(N_BLOCKS, return_sequences=True)(x) + x
+
         x = keras.layers.LayerNormalization(epsilon=1e-6)(x)
 
-        x = LSTM(N_BLOCKS)(x)
+        # x = LSTM(N_BLOCKS)(x)
+        #
+        # x = Dense(N_OUTPUTS, activation='selu')(x)
 
-        x = Dense(N_OUTPUTS, activation='selu')(x)
+        x = TimeDistributed(Dense(1, activation='gelu'))(x)
 
         out = x
         return inp, out
@@ -82,6 +135,7 @@ class LSTMTime2VecDeeper():
         inputs, outputs = self.nn_sctructure(N_INPUTS, N_FEATURES, N_OUTPUTS)
         self.model = Model(inputs, outputs)
         self.model.compile(loss='mae', optimizer='adam', metrics=[new_mape])
+
 
 class ResidualWrapper(Model):
     def __init__(self, model):

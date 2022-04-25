@@ -46,5 +46,5 @@ font1 = {'family': 'SimHei',
          }
 
 os.makedirs('./saved_model', exist_ok=True)
-select_model = 'lstm_60'
+select_model = 'lstmmulti_60'
 result_path = './result_region_' + select_model
