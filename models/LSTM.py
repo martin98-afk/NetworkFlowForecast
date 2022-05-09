@@ -2,6 +2,12 @@ from config import *
 from models.Time2Vec import time2vec
 from models.Losses import *
 
+class myCallback(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        if(logs.get('loss')<0.4):
+            print("\nReached 60% accuracy so cancelling training!")
+            self.model.stop_training = True
+
 
 class LSTMTime2Vec():
     def __init__(self, x, y):
@@ -53,26 +59,25 @@ class LSTMTime2VecMultiInput():
         x = inp1
         y = inp2
 
-        time_embedding = TimeDistributed(time2vec(3))(x[:, :, -1:])
+        time_embedding = TimeDistributed(time2vec(5))(x[:, :, -1:])
         x = Concatenate(axis=-1)([x, time_embedding])
 
         x = LSTM(N_BLOCKS, return_sequences=True)(x)
 
-        x = LSTM(int(N_BLOCKS/2))(x)
+        x = LSTM(N_BLOCKS)(x)
 
         x = RepeatVector(N_OUTPUTS)(x)
 
-        y = Dense(32, activation='gelu')(y)
+        # y = Dense(32, activation='tanh')(y)
         x = Concatenate(axis=-1)([x, y])
 
         x = LSTM(N_BLOCKS, return_sequences=True)(x)
 
-        #
-        # x = LSTM(N_BLOCKS)(x)
-        #
-        # x = Dense(N_OUTPUTS, activation='gelu')(x)
+        x = LSTM(N_BLOCKS, return_sequences=True)(x)
 
-        x = TimeDistributed(Dense(1, activation='gelu'))(x)
+        x = TimeDistributed(Dense(64, activation='relu'))(x)
+
+        x = TimeDistributed(Dense(1, activation='gelu', bias_regularizer='l2'))(x)
 
         out = x
         return inp1, inp2, out
@@ -86,7 +91,8 @@ class LSTMTime2VecMultiInput():
                                                        N_PREDICT_INFO,
                                                        N_OUTPUTS)
         self.model = Model(inputs=[inputs1, inputs2], outputs=outputs)
-        self.model.compile(loss='mse', optimizer='adam', metrics=[new_mape])
+        self.model.compile(loss=keras.losses.Huber(), optimizer='adam', metrics=[new_mape])
+        # self.model.compile(loss='mse', optimizer='adam', metrics=[new_mape])
 
 
 class LSTMTime2VecDeeper():

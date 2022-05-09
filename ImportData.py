@@ -3,6 +3,25 @@ import pandas as pd
 from config import *
 from CgiTablePreprocess import read_base_station_info
 
+def filter_one_cgi(data):
+    data = data.sort_values(by='timestamp')
+    filtered_data = data.iloc[3:-3]
+    download = data['download'].values
+    filtered_download = []
+    for i in range(3,len(download)-3):
+        filtered_download.append(np.mean(download[i-3:i+3]))
+    filtered_download = np.array(filtered_download)
+    filtered_data['download'] = filtered_download
+
+    return filtered_data
+
+def filter(data):
+    cgi_list = data.index.unique()
+    filtered_data = pd.DataFrame()
+    for cgi in cgi_list:
+        filtered_data = pd.concat([filtered_data, filter_one_cgi(data.loc[cgi])])
+    return filtered_data
+
 
 def import_data(path1, path2, not_include=['地市', '区县', '覆盖场景']):
     """
@@ -12,14 +31,60 @@ def import_data(path1, path2, not_include=['地市', '区县', '覆盖场景']):
     :return: processed_df1: 和时间表join后的小区数据集, df_dummy: 4g工参数据
     """
     # # 导入已经处理过的数据集
-    data = pd.read_csv(path1, index_col='cgi')
-    data.timestamp = data.timestamp.astype('datetime64[ns]')
     # 综合5g基站信息
-    data5g = get_5g_data()
-    data5g.index = pd.DatetimeIndex(data5g.index)
+    if mode == '4g':
+        data = pd.read_csv(path1, index_col='cgi')
+        data.timestamp = data.timestamp.astype('datetime64[ns]')
+        data5g = get_5g_data()
+        data5g.index = pd.DatetimeIndex(data5g.index)
 
-    data = pd.merge(data, data5g, how='left', left_on='timestamp', right_index=True)
-    data['download5G'] = data['download5G'].fillna(0)
+        data = pd.merge(data, data5g, how='left', left_on='timestamp', right_index=True)
+        data['download_another'] = data['download5G'].fillna(0)
+        data.drop('download5G', axis=1, inplace=True)
+        data = data[['timestamp','download_another', 'download']]
+        # print('滤波前：',data)
+        # data = filter(data)
+        # print('滤波后：',data)
+        data = merge_extra_info(data)
+    else:
+        # 综合4g基站信息，使用4g-5g信息匹配表
+        data = pd.read_csv(path1, index_col='cgi')
+        # data['cgi'] = data['index']
+        # data.drop('index', axis=1, inplace=True)
+
+        data.timestamp = data.timestamp.astype('datetime64[ns]')
+        # data4g = get_4g_data()
+        # data['label'] = data['4g_cgi'] + '-' + data['timestamp'].astype('str')
+        #
+        # data = pd.merge(data, data4g, how='inner', left_on='label', right_on='label')
+        # data['timestamp'] = data['timestamp_x']
+        # data.drop(['label','timestamp_x','timestamp_y'], axis=1, inplace=True)
+        # data['download_another'] = data['download_another'].fillna(0)
+        # data = pd.DataFrame(data.groupby(['cgi', 'timestamp']).mean())
+        # data.reset_index(inplace=True)
+        # data = data[['cgi','timestamp','download_another', 'download']]
+        start_time = data.timestamp.unique()[-history_day]
+        data = data[data['timestamp'] > start_time]
+        # data.set_index('cgi', inplace = True)
+        # data = filter(data)
+        data = join_date(data)
+
+    # 小区基站信息导入
+    cgi_list = data.index.unique()
+    df_dummy = read_base_station_info(path2, cgi_list, not_include=not_include)
+
+    df_dummy['地点'] = df_dummy[not_include[0]]
+    for i in range(len(not_include) - 1):
+        df_dummy['地点'] = df_dummy['地点'] + '_' + df_dummy[not_include[i + 1]]
+    df_dummy.drop(not_include, axis=1, inplace=True)
+    data = data.sort_values(by='timestamp')
+    return data, df_dummy
+
+
+def merge_extra_info(data):
+    # 添加额外信息
+    # 日期信息分解
+    data = join_date(data)
 
     # 获取南京疫情人数数据
     patient_df = get_patient_data()
@@ -30,27 +95,16 @@ def import_data(path1, path2, not_include=['地市', '区县', '覆盖场景']):
     data = pd.merge(data, weather_df, how='left', left_on='timestamp', right_index=True)
     data = pd.get_dummies(data, columns=['weather'])
 
-    # 南京小区流量求和用来训练直接预测总量的模型
-    processed_df1 = join_date(data)
-    processed_df1 = processed_df1.fillna(method='bfill')
+
+    processed_df1 = data.fillna(method='bfill')
 
     processed_df1 = processed_df1[
-        ['timestamp', 'download5G', 'currentConfirmedCount', 'max_tempreture',
+        ['timestamp', 'download_another', 'currentConfirmedCount', 'max_tempreture',
          'min_tempreture', 'weather_多云', 'weather_晴', 'weather_雨', 'weather_雪',
          'year', 'month', 'day', 'dayofweek', 'dayofyear', 'data_is_workday_True',
          'on_holiday_True', 'download']
     ]
-    # 小区基站信息导入
-    cgi_list = data.index.unique()
-    df_dummy = read_base_station_info(path2, cgi_list, not_include=not_include)
-
-    df_dummy['地点'] = df_dummy[not_include[0]]
-    for i in range(len(not_include) - 1):
-        df_dummy['地点'] = df_dummy['地点'] + '_' + df_dummy[not_include[i + 1]]
-    df_dummy.drop(not_include, axis=1, inplace=True)
-    processed_df1 = processed_df1.sort_values(by='timestamp')
-    return processed_df1, df_dummy
-
+    return processed_df1
 
 def join_date(data):
     # 导入日期信息，提供时间维度特征
@@ -85,6 +139,14 @@ def get_weather_data():
     return data
 
 
+def get_4g_data():
+    data = pd.read_csv('./4Gprocessed_data/4g_cgi_扬州.csv', index_col='cgi')
+    data['download_another'] = data['download']
+    data.drop('download', axis=1, inplace=True)
+    data['label'] = data.index + '-' + data['timestamp']
+    return data
+
+
 # def sum_result(processed_df, df_dummy):
 #     dongtai_cgi = df_dummy[df_dummy['地点'] == '镇江_丹阳市'].index
 #     processed_df1 = processed_df.loc[dongtai_cgi]
@@ -96,6 +158,10 @@ def get_weather_data():
 
 
 if __name__ == '__main__':
-    processed_df1, df_dummy = import_data('./data/cgi_2year_qinghuai.csv',
-                                          './data/剔除冗余特征后全量工参.csv', )
-    print(processed_df1.info())
+    not_include = ['城市', '覆盖场景']
+    raw_data, base_station_info = import_data(
+        './5Gprocessed_data/yangzhou.csv',
+        './5Gprocessed_data/处理后5G工参.csv',
+        not_include=not_include)
+    print(raw_data.info())
+    # get_4g_data()

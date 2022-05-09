@@ -7,7 +7,7 @@ import time
 
 
 #### 筛选没有缺失值的小区cgi编号
-def FilterCGI(data_path='../5G'):
+def FilterCGI(data_path='../4G'):
     '''
     过滤没有缺失值的小区cgi
     :param data_path:
@@ -15,7 +15,7 @@ def FilterCGI(data_path='../5G'):
     '''
     dataframe = []
     try:
-        with open('../5Gprocessed_data/complete_data_cgi.txt', 'r') as f:
+        with open('../4Gprocessed_data/complete_data_cgi.txt', 'r') as f:
             cgi_total_set = []
             for line in f.readlines():
                 cgi_total_set.append(line[:-1])
@@ -30,9 +30,9 @@ def FilterCGI(data_path='../5G'):
                 data = pd.read_csv(data_path + '/' + name + '/' + file_name,
                                    compression='gzip', encoding='gbk',
                                    error_bad_lines=False)
-                data.drop(data[pd.isnull(data['下行流量(TB)'])].index, inplace=True)
+                data.drop(data[pd.isnull(data['下行流量'])].index, inplace=True)
                 data.drop(data[pd.isnull(data['cgi'])].index, inplace=True)
-                data.drop(data[data['下行流量(TB)'] < 1e-5].index, inplace=True)
+                data.drop(data[data['下行流量'] < 1e-5].index, inplace=True)
 
                 cgi_set = set(data.cgi.unique())
                 if cgi_total_set != None:
@@ -43,21 +43,21 @@ def FilterCGI(data_path='../5G'):
                 print(len(cgi_total_set))
 
     print(len(cgi_total_set))
-    with open('../5Gprocessed_data/complete_data_cgi.txt', 'w') as f:
+    with open('../4Gprocessed_data/complete_data_cgi.txt', 'w') as f:
         for cgi in cgi_total_set:
             f.write(cgi + '\n')
 
 
-def ExtractFlowData(path='../5G'):
+def ExtractFlowData(path='../4G'):
     '''
     提取小区流量数据，
     :param path: 全量数据路径
     :return: None
     '''
-    path1 = '../5Gprocessed_data/'
+    path1 = '../4Gprocessed_data/'
     # 提取没有缺失值的小区cgi
     try:
-        exist_data = pd.read_csv('../5Gprocessed_data/5G全量数据.csv', index_col='cgi')
+        exist_data = pd.read_csv('../4Gprocessed_data/4G全量数据.csv', index_col='cgi')
         cgi_total_list = exist_data.index.unique()
         exist_date = read_process_date()
     except:
@@ -72,10 +72,10 @@ def ExtractFlowData(path='../5G'):
     for name in fold_name:
 
         for file_name in os.listdir(path + '/' + name):
+            date = file_name[:7] + '-' + file_name[7:9]
+            if file_name[-2:] == 'gz' and date not in exist_date:
 
-            if file_name[-2:] == 'gz' and file_name[:10] not in exist_date:
-
-                print('正在处理', file_name[:10], '日期的数据')
+                print('正在处理', date, '日期的数据')
                 data = pd.read_csv(path + '/' + name + '/' + file_name, compression='gzip',
                                    encoding='gbk', error_bad_lines=False)
                 data.set_index('cgi', inplace=True)
@@ -85,9 +85,9 @@ def ExtractFlowData(path='../5G'):
                 data = data.loc[set(cgi_total_list) & set(data.index.unique())]
 
                 try:
-                    data['download'] = data[['下行流量(TB)', '上行流量(TB)']].apply(lambda x: x.sum(),
+                    data['download'] = data[['下行流量', '上行流量']].apply(lambda x: x.sum(),
                                                                             axis=1)
-                    data.drop(['小区名称', '下行流量(TB)', '上行流量(TB)', '用户数量'], axis=1, inplace=True)
+                    data.drop(['小区名称', '下行流量', '上行流量', '用户数量'], axis=1, inplace=True)
                 except:
                     data['download'] = data[['PDCP_UpOctDl', 'PDCP_UpOctUl']].apply(
                         lambda x: x.sum(), axis=1)
@@ -115,9 +115,9 @@ def TransformDateFormat(dataframe, timelabel):
 
     data.drop(timelabel, axis=1, inplace=True)
     data.sort_values(by='timestamp', inplace=True)
-    exist_data = pd.read_csv('../5Gprocessed_data/5G全量数据.csv', index_col='cgi')
+    exist_data = pd.read_csv('../4Gprocessed_data/4G全量数据.csv', index_col='cgi')
     data = pd.concat([exist_data, data])
-    data.to_csv('../5Gprocessed_data/5G全量数据.csv')
+    data.to_csv('../4Gprocessed_data/4G全量数据.csv')
 
 
 def read_process_date():
@@ -131,12 +131,12 @@ def read_process_date():
 
 
 def extract_city_data(city_name):
-    cgi_info = pd.read_csv('../5Gprocessed_data/处理后5G工参.csv', index_col='CGI')
+    cgi_info = pd.read_csv('../4Gprocessed_data/剔除冗余特征后全量工参.csv', index_col='CGI')
     cgi_info = cgi_info[cgi_info['城市'] == city_name]
-    data = pd.read_csv('../5Gprocessed_data/5G全量数据.csv', index_col='cgi')
+    data = pd.read_csv('../4Gprocessed_data/4G全量数据.csv', index_col='cgi')
     city_cgi = set(cgi_info.index.unique())
     data = data.loc[city_cgi & set(data.index.unique())]
-    data.to_csv('../5Gprocessed_data/' + city_name + '.csv')
+    data.to_csv('../4Gprocessed_data/' + city_name + '.csv')
 
 
 if __name__ == '__main__':

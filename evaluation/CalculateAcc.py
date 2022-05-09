@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
-
+from models.Losses import new_mape_numpy
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def calculate_acc(dataframe, index):
     id = ['scene_name', '< 10', '< 20', '< 30', '< 40', '> 40']
@@ -45,3 +47,18 @@ def calculate_acc(dataframe, index):
                                        '<20', '<30', '<40', '>40'])
     sum_result = sum_result.sort_values(by='median')
     return sum_result
+
+def cal_single_acc(true, predict):
+    count = 0
+    mape_list = []
+    for i in range(true.shape[0]):
+        mape = new_mape_numpy(true[i,:], predict[i,:])
+        mape_list.append(mape)
+        if mape < 20:
+            count += 1
+    mape = np.array(sorted(mape_list))
+    plt.plot(mape)
+    plt.savefig('./figures/mape_distribution.png')
+    plt.show()
+
+    return count / true.shape[0] * 100

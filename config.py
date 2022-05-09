@@ -14,7 +14,7 @@ warnings.filterwarnings('ignore')
 import matplotlib.pyplot as plt
 from sklearn import metrics
 import time
-
+import seaborn as sns
 from tensorflow.keras.preprocessing import timeseries_dataset_from_array
 import tensorflow as tf
 
@@ -24,9 +24,9 @@ import tensorflow.keras as keras
 from tensorflow.python.keras.utils.multi_gpu_utils import multi_gpu_model
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  ##表示使用GPU编号为0的GPU进行计算
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"  ##表示使用GPU编号为0的GPU进行计算
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM
+from tensorflow.keras.layers import LSTM, GRU
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.layers import Dense, RepeatVector, TimeDistributed, Activation
@@ -45,6 +45,12 @@ font1 = {'family': 'SimHei',
          'size': 20,
          }
 
+mode = '5g'
+validate = True
+label_len = 1
+input_len = 20
+output_len = 60
+history_day = 300
 os.makedirs('./saved_model', exist_ok=True)
-select_model = 'lstmmulti_60'
+select_model = 'lstmmulti'
 result_path = './result_region_' + select_model
