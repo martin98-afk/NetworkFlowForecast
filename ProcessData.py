@@ -6,7 +6,7 @@ def series_to_supervised(data, seq_len=30, pred_len=180, label_len=label_len):
     X = data[:-pred_len, :]
     Y = data[(seq_len - label_len):, -1]  # .reshape(-1,1)
     Z = data[(seq_len - label_len):, -8:-1]
-    inputs, targets = None, None
+    inputs, targets, predicts = None, None, None
     if X.shape[0] != 0:
         input_dataset = timeseries_dataset_from_array(
             X, None, sequence_length=seq_len, sequence_stride=1, batch_size=X.shape[0])
@@ -25,22 +25,43 @@ def series_to_supervised(data, seq_len=30, pred_len=180, label_len=label_len):
     return inputs, targets, predicts
 
 
+def series_to_supervised_scratch(data, seq_len=30, pred_len=180, label_len=0):
+    X = data[:-pred_len, :]
+    Y = data[(seq_len - label_len):, -1]  # .reshape(-1,1)
+    Z = data[(seq_len - label_len):, -8:-1]
+    input_dataset = []
+    target_dataset = []
+    predict_dataset = []
+    if X.shape[0] != 0:
+        for i in range(X.shape[0] - seq_len + 1):
+            input_dataset.append(X[i:i + seq_len, :])
+        for i in range(Y.shape[0] - pred_len + 1):
+            target_dataset.append(Y[i:i + pred_len])
+            predict_dataset.append(Z[i:i + pred_len,:])
+
+    input_dataset = tf.convert_to_tensor(np.array(input_dataset))
+    target_dataset = tf.convert_to_tensor(np.array(target_dataset))
+    predict_dataset = tf.convert_to_tensor(np.array(predict_dataset))
+    return input_dataset, target_dataset, predict_dataset
+
 # 划分训练数据
 def split_data_train(data, cgi, num_in, num_out):
     raw_data = data.loc[cgi].values[:-output_len]
-    inputs, targets, predicts = series_to_supervised(raw_data, num_in, num_out)
+    inputs, targets, predicts = series_to_supervised_scratch(raw_data, num_in, num_out)
     return inputs, targets, predicts
+
 
 # 划分测试数据
 def split_data_test(data, cgi, num_in, num_out):
     raw_data = data.loc[cgi].values[-output_len - input_len:]
-    inputs, targets, predicts = series_to_supervised(raw_data, num_in, num_out)
+    inputs, targets, predicts = series_to_supervised_scratch(raw_data, num_in, num_out)
     return inputs, targets, predicts
+
 
 # 划分真实数据
 def split_data(data, cgi, num_in, num_out):
     raw_data = data.loc[cgi].values
-    inputs, targets, predicts = series_to_supervised(raw_data, num_in, num_out)
+    inputs, targets, predicts = series_to_supervised_scratch(raw_data, num_in, num_out)
     return inputs, targets, predicts
 
 
@@ -57,10 +78,10 @@ def process_data(processed_df, split_rate=0.8, input_len=30, output_len=180):
 
     if validate == False:
         inputs, targets, predicts = split_data_train(processed_df, processed_df.index[0], input_len,
-                                               output_len)
-        train_inputs = inputs#[:int(split_rate * inputs.shape[0]), :, :]
-        train_targets = targets#[:int(split_rate * inputs.shape[0]), :]
-        train_predicts = predicts#[:int(split_rate * inputs.shape[0]), :]
+                                                     output_len)
+        train_inputs = inputs  # [:int(split_rate * inputs.shape[0]), :, :]
+        train_targets = targets  # [:int(split_rate * inputs.shape[0]), :]
+        train_predicts = predicts  # [:int(split_rate * inputs.shape[0]), :]
         val_inputs = inputs[int(split_rate * inputs.shape[0]):, :, :]
         val_targets = targets[int(split_rate * inputs.shape[0]):, :]
         val_predicts = predicts[int(split_rate * inputs.shape[0]):, :]
@@ -69,7 +90,7 @@ def process_data(processed_df, split_rate=0.8, input_len=30, output_len=180):
         train_sample_predicts = predicts[:1, :]
 
         inputs, targets, predicts = split_data_test(processed_df, processed_df.index[0], input_len,
-                                                     output_len)
+                                                    output_len)
         test_inputs = inputs[-1:, :, :]
         test_targets = targets[-1:, :]
         test_predicts = predicts[-1:, :]
@@ -79,24 +100,25 @@ def process_data(processed_df, split_rate=0.8, input_len=30, output_len=180):
                 continue
             inputs, targets, predicts = split_data_train(processed_df, cgi, input_len, output_len)
             train_inputs = tf.concat([inputs
-                                      #[:int(split_rate * inputs.shape[0]), :, :]
-                                      , train_inputs],
+                                      # [:int(split_rate * inputs.shape[0]), :, :]
+                                         , train_inputs],
                                      axis=0)
             train_targets = tf.concat([targets
-                                       #[:int(split_rate * inputs.shape[0]), :]
+                                       # [:int(split_rate * inputs.shape[0]), :]
                                           , train_targets],
                                       axis=0)
             train_predicts = tf.concat(
                 [predicts
-                 #[:int(split_rate * inputs.shape[0]), :, :]
+                 # [:int(split_rate * inputs.shape[0]), :, :]
                     , train_predicts],
                 axis=0)
             val_inputs = tf.concat([inputs[int(split_rate * inputs.shape[0]):, :, :], val_inputs],
                                    axis=0)
             val_targets = tf.concat([targets[int(split_rate * inputs.shape[0]):, :], val_targets],
                                     axis=0)
-            val_predicts = tf.concat([predicts[int(split_rate * inputs.shape[0]):, :, :], val_predicts],
-                                     axis=0)
+            val_predicts = tf.concat(
+                [predicts[int(split_rate * inputs.shape[0]):, :, :], val_predicts],
+                axis=0)
             train_sample_inputs = tf.concat([inputs[:1, :, :], train_sample_inputs], axis=0)
             train_sample_targets = tf.concat([targets[:1, :], train_sample_targets], axis=0)
             train_sample_predicts = tf.concat([predicts[:1, :, :], train_sample_predicts], axis=0)
@@ -107,7 +129,7 @@ def process_data(processed_df, split_rate=0.8, input_len=30, output_len=180):
             test_predicts = tf.concat([predicts[-1:, :, :], test_predicts], axis=0)
     else:
         inputs, targets, predicts = split_data(processed_df, processed_df.index[0], input_len,
-                                                     output_len)
+                                               output_len)
         train_inputs = inputs[:int(split_rate * inputs.shape[0]), :, :]
         train_targets = targets[:int(split_rate * inputs.shape[0]), :]
         train_predicts = predicts[:int(split_rate * inputs.shape[0]), :]
@@ -142,8 +164,9 @@ def process_data(processed_df, split_rate=0.8, input_len=30, output_len=180):
                                    axis=0)
             val_targets = tf.concat([targets[int(split_rate * inputs.shape[0]):, :], val_targets],
                                     axis=0)
-            val_predicts = tf.concat([predicts[int(split_rate * inputs.shape[0]):, :, :], val_predicts],
-                                     axis=0)
+            val_predicts = tf.concat(
+                [predicts[int(split_rate * inputs.shape[0]):, :, :], val_predicts],
+                axis=0)
             train_sample_inputs = tf.concat([inputs[:1, :, :], train_sample_inputs], axis=0)
             train_sample_targets = tf.concat([targets[:1, :], train_sample_targets], axis=0)
             train_sample_predicts = tf.concat([predicts[:1, :, :], train_sample_predicts], axis=0)
@@ -153,6 +176,9 @@ def process_data(processed_df, split_rate=0.8, input_len=30, output_len=180):
             test_targets = tf.concat([targets[-1:, :], test_targets], axis=0)
             test_predicts = tf.concat([predicts[-1:, :, :], test_predicts], axis=0)
 
+    # test_predicts = test_predicts.numpy()
+    # test_predicts[:, 1:, -1] = 0
+    # test_predicts = tf.convert_to_tensor(test_predicts)
 
     return train_inputs, train_targets, train_predicts, val_inputs, val_targets, val_predicts, \
            test_inputs, test_targets, test_predicts, \
@@ -183,9 +209,9 @@ def split_region(processed_df1, df_dummy, input_len, output_len):
             scaler = MinMaxScaler()
             col_data = processed_df[col].values
             if validate == True:
-                col_data = col_data[:int((len(col_data)-output_len)*0.8)]
+                col_data = col_data[:int((len(col_data) - output_len) * 0.8)]
             else:
-                col_data = col_data[:-output_len]
+                col_data = col_data[:-output_len - input_len]
             scaler.fit(col_data.reshape(-1, 1))
             processed_df[col] = scaler.transform(processed_df[col].values.reshape(-1, 1))
             scalers[col] = scaler

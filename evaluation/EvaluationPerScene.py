@@ -37,7 +37,7 @@ increase = pd.DataFrame()
 fiveG_result = []
 for file_name in files:
     split_name = file_name.split('_')
-    if len(split_name) == 4 and split_name[1] == '六合区' and mode == '4g':
+    if len(split_name) == 4 and mode == '4g':
         data = pd.read_csv(path + '/' + file_name)
         data = data.iloc[-180:]
         true = data['true'].values

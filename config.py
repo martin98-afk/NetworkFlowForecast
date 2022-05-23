@@ -35,6 +35,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras import layers
 from tensorflow.keras.layers import Input, LSTM, Dense, Bidirectional, Concatenate, Reshape, Lambda
 from tensorflow.keras.losses import mape
+from tensorflow.keras.utils import plot_model
 
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rc('xtick', labelsize=20)
@@ -45,12 +46,12 @@ font1 = {'family': 'SimHei',
          'size': 20,
          }
 
-mode = '5g'
-validate = True
-label_len = 1
-input_len = 20
-output_len = 60
-history_day = 300
-os.makedirs('./saved_model', exist_ok=True)
-select_model = 'lstmmulti'
-result_path = './result_region_' + select_model
+mode = '4g'
+validate = False
+label_len = 0
+input_len = 60
+output_len = 180
+history_day = 200
+
+select_model = 'transformer'
+result_path = './result_region_' + select_model + '_Inp' + str(input_len) + '_Out' + str(output_len)
